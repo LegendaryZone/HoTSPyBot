@@ -135,36 +135,36 @@ class MapScanner(threading.Thread):
                 self.gameStateObject.setGameStateKeyValue("bluePoints",bluePoints)
                 self.gameStateObject.setGameStateKeyValue("yellowPoints",yellowPoints)
 
-                #self.Log.log(f"{self.name}: GreenPoint:\t {len(gp)}, RedPoints:\t{len(redPoints)}, BluePoints:\t {len(bluePoints)}, yellowPoints:\t{len(yellowPoints)}")
+                self.Log.log(f"{self.name}: GreenPoint:\t {len(gp)}, RedPoints:\t{len(redPoints)}, BluePoints:\t {len(bluePoints)}, yellowPoints:\t{len(yellowPoints)}")
                 
-                # fps = 1/(time.time()-last_time)
-                # fpsSum = fpsSum + fps
-                # count = count + 1
-                # if time.time() - fpsTime >= 10:
-                #     print(f"Average FPS (10s): {fpsSum/count}")
-                #     fpsTime = time.time()
-                #     count = 0
-                #     fpsSum=0
+                fps = 1/(time.time()-last_time)
+                fpsSum = fpsSum + fps
+                count = count + 1
+                if time.time() - fpsTime >= 10:
+                    print(f"Average FPS (10s): {fpsSum/count}")
+                    fpsTime = time.time()
+                    count = 0
+                    fpsSum=0
                 
-                # final = np.zeros_like(img)
-                # for p in redPoints:
-                #     cv2.rectangle(final, p["rect"][0],p["rect"][1], (0,0,255),2)
-                # cv2.rectangle(final,(int(gP["x"] - gP["size"]/2), int(gP["y"] - gP["size"]/2)),(int(gP["x"] + gP["size"]/2), int(gP["y"] + gP["size"]/2)), (0,255,0),2)
-                # for p in bluePoints:
-                #     cv2.rectangle(final, p["rect"][0],p["rect"][1], (255,0,0),2)
-                # for p in yellowPoints:
-                #     cv2.rectangle(final, p["rect"][0],p["rect"][1], (0,255,255),2)
+                final = np.zeros_like(img)
+                for p in redPoints:
+                    cv2.rectangle(final, p["rect"][0],p["rect"][1], (0,0,255),2)
+                cv2.rectangle(final,(int(gP["x"] - gP["size"]/2), int(gP["y"] - gP["size"]/2)),(int(gP["x"] + gP["size"]/2), int(gP["y"] + gP["size"]/2)), (0,255,0),2)
+                for p in bluePoints:
+                    cv2.rectangle(final, p["rect"][0],p["rect"][1], (255,0,0),2)
+                for p in yellowPoints:
+                    cv2.rectangle(final, p["rect"][0],p["rect"][1], (0,255,255),2)
                 
-                # cv2.imshow("VIOLET",violet)
-                # cv2.imshow("filled",violet)
-                # cv2.imshow("roughMaskedMap", roughMaskedMap)
-                # cv2.imshow("mapMask",mapMask)
+                cv2.imshow("VIOLET",violet)
+                cv2.imshow("filled",violet)
+                cv2.imshow("roughMaskedMap", roughMaskedMap)
+                cv2.imshow("mapMask",mapMask)
 
-                # cv2.imshow("COLOR FILTERING RESULT",final)
-                #summed = cv2.addWeighted(maskedMap,0.4,final,0.6,0)
-                # cv2.imshow("SUM",summed)
-                # if cv2.waitKey(25) & 0xFF == ord("q"):
-                #     cv2.destroyAllWindows()
+                cv2.imshow("COLOR FILTERING RESULT",final)
+                summed = cv2.addWeighted(maskedMap,0.4,final,0.6,0)
+                cv2.imshow("SUM",summed)
+                if cv2.waitKey(25) & 0xFF == ord("q"):
+                    cv2.destroyAllWindows()
 
 
 

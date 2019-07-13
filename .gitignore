@@ -2,7 +2,11 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+hpTest.py
+**Scripts
+project
+pyvenv.cfg
+templates.pickle
 # C extensions
 *.so
 
