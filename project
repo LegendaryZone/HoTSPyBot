@@ -1,0 +1,14 @@
+Process: stateFinder
+        
+    StatusObject:
+        state:
+            gameOpened
+            lobby
+                hero select
+            loadingScreen
+            inGame
+                rejoin
+            MVPScreen
+                LeaveScreen
+                ThanksScreen
+        
