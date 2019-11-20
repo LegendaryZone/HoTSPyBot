@@ -312,8 +312,8 @@
     "inGameResources":{
         "hpBar":{
             "box":{
-                "top":1009,
-                "left":206,
+                "top":1008,
+                "left":210,
                 "width":192,
                 "height":2
             },

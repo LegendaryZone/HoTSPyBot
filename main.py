@@ -53,10 +53,11 @@ if __name__ == '__main__':
 
     procList.update({"StateFinder": StateFinder(state, Log, settings["stateFindingResources"])})
     procList.update({"KeyboardListener": KeyboardListener(keyboard,Log)})
-    procList.update({"UIScanner": UIScanner(gameState,Log,settings)})
+    procList.update({"UIScanner": UIScanner(gameState,Log,settings,state)})
 
     procList["KeyboardListener"].start()
-    Log.log("Enter the lobby and press F10 to start the bot!")
+    
+    Log.log("Enter the lobby and press F5 to start the bot, F6 to kill it!")
     # Wait until user presses F10
     while not keyboard.getAction()=="Start":
         pass
@@ -68,17 +69,19 @@ if __name__ == '__main__':
     while not keyboard.getAction() == "Exit":
         lastTime = time.time()
         s = '{0:.2f}'.format(state.getSpeed())
-        Log.log(f"STATE: {state.getState()} SIDE: {state.getSide()}")
+        Log.log(f"{s} Hz STATE: {state.getState()} SIDE: {state.getSide()}")
+        
         if gameState.getProcRunning():
-            Log.log(f"HP: {gameState.getGameStateValue('hp')} POINTS: {len(gameState.getGameStateValue('bluePoints'))}")
+            Log.log(f"HP: {gameState.getGameStateValue('hp')}")
+            #Log.log(f"GameState: {json.dumps(gameState.getGameState(),indent = 4)}")
         if state.getState() == "inGame" and not gameState.getProcRunning():
             procList["UIScanner"].start()
             Log.log("sleeping...")
             time.sleep(5)
-        if state.getState() != "inGame" and gameState.getProcRunning():
-            procList["UIScanner"].shutdown()
-            Log.log("sleeping...")
-            time.sleep(5)
+        # if state.getState() != "inGame" and gameState.getProcRunning():
+        #     procList["UIScanner"].shutdown()
+        #     Log.log("sleeping...")
+        #     time.sleep(5)
         delta = (time.time() - lastTime)
         if delta > 0: state.setSpeed( ( 1/(time.time() - lastTime) ) )
     print("Stopping all processes")

@@ -27,10 +27,10 @@ class KeyboardListener(multiprocessing.Process):
 
     def on_press(self,key):
         try:
-            if key==keyboard.Key.f10:
+            if key==keyboard.Key.f5:
                 self.keyboardObject.setAction("Start")
                 #self.Log.log(f"{self.name}: {self.keyboardObject.getAction()}")
-            if key==keyboard.Key.f11:
+            if key==keyboard.Key.f6:
                 self.keyboardObject.setAction("Exit")  
         except AttributeError:
             self.Log.log('key {0} pressed'.format(key))
@@ -151,7 +151,7 @@ class StateFinder(multiprocessing.Process):
 
 
 class UIScanner(multiprocessing.Process):
-    def __init__(self, gameStateObject, Log, settings, **kwargs):
+    def __init__(self, gameStateObject, Log, settings,state, **kwargs):
         multiprocessing.Process.__init__(self)
         self.name = "UIScanner"
         self.gameStateObject = gameStateObject
@@ -160,13 +160,14 @@ class UIScanner(multiprocessing.Process):
         self.settings = settings
         self.running = False
         self.threadList = {}
+        self.state=state
 
 
     def run(self):
         self.gameStateObject.setProcStatus(True)
         self.Log.log(f"Starting {self.name}")
-        self.threadList.update({"HPScanner":HPScanner("HPScanner",self.gameStateObject,self.Log,self.settings["inGameResources"]["hpBar"])})
-        self.threadList.update({"MapScanner":MapScanner("MapScanner",self.gameStateObject,self.Log,self.settings["inGameResources"]["map"])})
+        self.threadList.update({"HPScanner":HPScanner("HPScanner",self.gameStateObject,self.Log,self.settings["inGameResources"]["hpBar"],self.state)})
+        self.threadList.update({"MapScanner":MapScanner("MapScanner",self.gameStateObject,self.Log,self.settings["inGameResources"]["map"],self.state)})
         for k in self.threadList:
             self.threadList[k].start()
         while not self.exit.is_set():

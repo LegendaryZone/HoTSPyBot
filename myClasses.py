@@ -28,7 +28,7 @@ class StateObject():
         self.state = "undefined"
         self.side = "undefined"
         self.speed = 0
-        self.maxSize = 7
+        self.maxSize = 15
         self.stateQ = queue.Queue(maxsize = self.maxSize)
     def getState(self):
         return self.state
@@ -53,7 +53,10 @@ class GameStateObject():
     def getGameState(self):
         return self.gameState
     def getGameStateValue(self,k):
-        return self.gameState[k]
+        if k in self.gameState.keys():
+            return self.gameState[k]
+        else:
+            return ""
     def setGameStateKeyValue(self,k,v):
         self.gameState[k] = v
     def setProcStatus(self,p):
