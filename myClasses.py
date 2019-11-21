@@ -30,6 +30,9 @@ class StateObject():
         self.speed = 0
         self.maxSize = 15
         self.stateQ = queue.Queue(maxsize = self.maxSize)
+
+        self.speedCount = 0
+
     def getState(self):
         return self.state
     def setState(self,state):
@@ -42,9 +45,14 @@ class StateObject():
     def setSide(self,side):
         self.side = side
     def getSpeed(self):
+        if self.speedCount > 0:
+            return self.speed/self.speedCount
         return self.speed
+        # return self.speed
     def setSpeed(self,speed):
-        self.speed = speed
+        self.speed += speed
+        self.speedCount += 1
+        # self.speed = speed
 
 class GameStateObject():
     def __init__(self):

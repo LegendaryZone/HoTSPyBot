@@ -4,6 +4,7 @@ from pynput import keyboard
 from myClasses import TemplateFinder, ColorFinder
 from threads import HPScanner, MapScanner
 
+
 class KeyboardListener(multiprocessing.Process):
 
     def __init__(self, keyboardObject, Log, **kwargs):
@@ -144,36 +145,54 @@ class StateFinder(multiprocessing.Process):
         left = self.colorFinder.checkColor(self.settings["loading"]["left"],self.settings["loading"]["color"],sens) 
         right = self.colorFinder.checkColor(self.settings["loading"]["right"],self.settings["loading"]["color"],sens)
 
-        if self.stateObject.getSide() == "undefined":
-            if left: self.stateObject.setSide("left")
-            elif right: self.stateObject.setSide("right")
+        #if self.stateObject.getSide() == "undefined":
+        if left: self.stateObject.setSide("left")
+        elif right: self.stateObject.setSide("right")
         return left or right
 
 
 class UIScanner(multiprocessing.Process):
+    
     def __init__(self, gameStateObject, Log, settings,state, **kwargs):
-        multiprocessing.Process.__init__(self)
+        super(UIScanner, self).__init__()
+        #multiprocessing.Process.__init__(self)
         self.name = "UIScanner"
         self.gameStateObject = gameStateObject
         self.exit = multiprocessing.Event()
         self.Log = Log
         self.settings = settings
         self.running = False
-        self.threadList = {}
         self.state=state
-
+        self._threads = {}
+        
+    def getThreads(self):
+        return self._threads
+    def setThreads(self,t):
+       self. _threads = t
+    def appendThread(self,k,t):
+        self._threads[k] = t
+    threadList = property(getThreads,setThreads)
 
     def run(self):
         self.gameStateObject.setProcStatus(True)
         self.Log.log(f"Starting {self.name}")
-        self.threadList.update({"HPScanner":HPScanner("HPScanner",self.gameStateObject,self.Log,self.settings["inGameResources"]["hpBar"],self.state)})
-        self.threadList.update({"MapScanner":MapScanner("MapScanner",self.gameStateObject,self.Log,self.settings["inGameResources"]["map"],self.state)})
+        self.appendThread("HPScanner",HPScanner("HPScanner",self.gameStateObject,self.Log,self.settings["inGameResources"]["hpBar"],self.state))
+        self.threadList["HPScanner"].daemon = True
+        self.appendThread("MapScanner",MapScanner("MapScanner",self.gameStateObject,self.Log,self.settings["inGameResources"]["map"],self.state))
+        self.threadList["MapScanner"].daemon = True
+        # self.threadList.update({"HPScanner":HPScanner("HPScanner",self.gameStateObject,self.Log,self.settings["inGameResources"]["hpBar"],self.state)})
+        # self.threadList.update({"MapScanner":MapScanner("MapScanner",self.gameStateObject,self.Log,self.settings["inGameResources"]["map"],self.state)})
         for k in self.threadList:
             self.threadList[k].start()
+
         while not self.exit.is_set():
             pass
+
         self.Log.log(f"Shutdown complete for {self.name}")
         self.gameStateObject.setProcStatus(False)
+
+    
+
 
     def shutdown(self):
         self.Log.log(f"Shutdown initiated for {self.name}")

@@ -3,7 +3,33 @@ import time
 import numpy as np
 import cv2
 import mss
+import asyncio
 from myClasses import ColorFinder
+
+class Server(threading.Thread):
+    def __init__(self, web,app,loop,Log,port=8081):
+        threading.Thread.__init__(self)
+        self.web = web
+        self.app = app
+        self.port = port
+        self.name = "ServerThread"
+        self.Log = Log
+        self.loop = loop
+        self.timeToStop = False
+    def run(self):
+        self.Log.log(f"Thread: {self.name} running")
+        asyncio.set_event_loop(self.loop)
+        self.web.run_app(self.app,port=self.port)
+        while not self.timeToStop:
+            pass
+        self.Log.log(f"Thread: {self.name} stopped")
+        return 
+    async def stop(self):
+        self.Log.log(f"Thread: {self.name} stopping")
+        self.timeToStop = True
+        await self.app.shutdown()
+        await self.app.cleanup()
+
 class HPScanner(threading.Thread):
     def __init__(self,name,gameStateObject,logObject,hpBar,state):
         threading.Thread.__init__(self)
@@ -17,29 +43,26 @@ class HPScanner(threading.Thread):
         self.state = state
     
     def run(self):
-        
         self.Log.log(f"Thread: {self.name} running")
         sampleWidth = int(self.hpBar["box"]["width"] / self.sampleNum)
-        #hpTick = self.hpBar["box"]["width"] / self.sampleNum
         boxes = []
         for i in range(self.sampleNum):
             boxes.append({"top":self.hpBar["box"]["top"],"left":self.hpBar["box"]["left"] + (sampleWidth * i),"width":sampleWidth,"height":self.hpBar["box"]["height"]})
         sens = 50
-        self.Log.log(f"{self.name}: Running hp scan")
-        while self.keepGoing and self.state.getState() == "inGame":
-            hp = 0
-            for i in range(self.sampleNum):
-                if self.colorFinder.checkColor(boxes[i],self.hpBar["hpColor"],sens) or self.colorFinder.checkColor(boxes[i],self.hpBar["shieldColor"],sens):
-                    hp = hp + 1
-            hp = int((hp / self.sampleNum)* 100)
-            self.gameStateObject.setGameStateKeyValue("hp",hp)
-            #self.Log.log(f"Thread: {self.name}, HP: {hp }%")
-
-        while self.keepGoing and self.state.getState() != "inGame":
+        while self.keepGoing:
+            while self.state.getState() == "inGame":
+                hp = 0
+                for i in range(self.sampleNum):
+                    if self.colorFinder.checkColor(boxes[i],self.hpBar["hpColor"],sens) or self.colorFinder.checkColor(boxes[i],self.hpBar["shieldColor"],sens):
+                        hp = hp + 1
+                hp = int((hp / self.sampleNum)* 100)
+                self.gameStateObject.setGameStateKeyValue("hp",hp)    
             pass
+
         self.Log.log(f"Thread: {self.name} exiting")
         return 0
     def stop(self):
+        self.Log.log(f"Thread: {self.name} initiating shutdown")
         self.keepGoing = False
 
 class MapScanner(threading.Thread):
@@ -62,126 +85,126 @@ class MapScanner(threading.Thread):
         self.state = state
     def run(self):
         self.Log.log(f"Thread: {self.name} running")
-        while self.state.getState() == "inGame":
-            with mss.mss() as sct:
-                img = cv2.cvtColor(np.array(sct.grab(self.mapObj["box"])),cv2.COLOR_BGRA2BGR)
-                mapMask = np.zeros_like(self.colorFilter(img))
-                imgBlurred = cv2.GaussianBlur(img, (5, 5), 0)
-                rp,gp,bp,yp = self.colorFilterMap(imgBlurred)
-                #create map mask
-                allPoints = []
-                for p in rp:
-                    allPoints.append(p["center"])
-                for p in bp:
-                    allPoints.append(p["center"])
-                xOffset = 50
-                yOffset = 20
-                #print(f"ALLPOINTS: {allPoints}")
-                minX = min(allPoints, key = lambda t: t[0])[0] - xOffset
-                minY = min(allPoints, key = lambda t: t[1])[1] - yOffset
-                maxX = max(allPoints, key = lambda t: t[0])[0] + xOffset
-                maxY = max(allPoints, key = lambda t: t[1])[1] + yOffset
-                #print(f"minX: {minX} minY: {minY} maxX: {maxX} maxY: {maxY}")
-                h = maxY - minY
-                w = maxX - minX
-                verts = np.array([[minX, minY+int(h/2)],[minX + int(w/3),minY],[minX + int(2*w/3),minY],[maxX, minY + int(h/2)],[minX + int(2*w/3),maxY],[minX + int(w/3),maxY],[minX,minY+ int(h/2)]],"int32")
-                #print(f"VERTS: {verts}")
-                cv2.fillConvexPoly(mapMask, verts, (255,255,255))
-                
-
-                roughMaskedMap = cv2.bitwise_and(img,img,mask = cv2.cvtColor(mapMask,cv2.COLOR_BGR2GRAY))
-                
-                blue = self.colorFilter(img,np.array(self.mapObj["colors"]["blueLower"]),np.array(self.mapObj["colors"]["blueUpper"]))
-                red = self.colorFilter(img,np.array(self.mapObj["colors"]["redLower"]),np.array(self.mapObj["colors"]["redUpper"]))
-                violet = self.colorFilter(roughMaskedMap, np.array(self.mapObj["colors"]["violetLower"]),np.array(self.mapObj["colors"]["violetUpper"]))
-                violet = cv2.add(cv2.add(red,blue),violet)
-                violet = cv2.cvtColor(violet,cv2.COLOR_BGR2GRAY)
-
-                cnt ,hi = cv2.findContours(violet,cv2.RETR_TREE,cv2.CHAIN_APPROX_NONE)
-                for c in cnt:
-                    cv2.fillConvexPoly(violet,c,(255,255,255))
-                violet = cv2.erode(violet, np.ones((5,5),np.uint8)/25,iterations = 1)
-                
-                mapMask = violet
-
-                gCount = 0
-                gXsum = 0
-                gYsum = 0
-                gSsum = 0
-                gP = {}#self.MapObj(cv2.KeyPoint(0,0,0))
-                gSampleThresh = 10
-                scanCondition = True
-                fpsSum=0
-                fpsTime=0
-                count=0
-
-                while self.keepGoing and self.state.getState() == "inGame":
-                    last_time = time.time()
+        while self.keepGoing:
+            while self.state.getState() == "inGame":
+                with mss.mss() as sct:
                     img = cv2.cvtColor(np.array(sct.grab(self.mapObj["box"])),cv2.COLOR_BGRA2BGR)
-                    maskedMap = cv2.bitwise_and(img,img,mask = mapMask)
-                    blurredMaskedMap = cv2.GaussianBlur(maskedMap, (5, 5), 0)
-                    redPoints, greenPoints, bluePoints, yellowPoints = self.colorFilterMap(blurredMaskedMap)
-                    if greenPoints:
-                        for p in greenPoints:
-                            gXsum += p["x"]
-                            gYsum += p["y"]
-                            gSsum += p["size"]
-                            gCount += 1
-                            gP["x"] = int(gXsum / gCount)
-                            gP["y"] = int(gYsum / gCount)
-                            gP["size"] = int(gSsum / gCount)
-
-                        gCount = 0
-                        gXsum = 0
-                        gYsum = 0
-                        gSsum = 0
-                        self.gameStateObject.setGameStateKeyValue("greenPoint",gp)
+                    mapMask = np.zeros_like(self.colorFilter(img))
+                    imgBlurred = cv2.GaussianBlur(img, (5, 5), 0)
+                    rp,gp,bp,yp = self.colorFilterMap(imgBlurred)
+                    #create map mask
+                    allPoints = []
+                    for p in rp:
+                        allPoints.append(p["center"])
+                    for p in bp:
+                        allPoints.append(p["center"])
+                    xOffset = 50
+                    yOffset = 20
+                    #print(f"ALLPOINTS: {allPoints}")
+                    minX = min(allPoints, key = lambda t: t[0])[0] - xOffset
+                    minY = min(allPoints, key = lambda t: t[1])[1] - yOffset
+                    maxX = max(allPoints, key = lambda t: t[0])[0] + xOffset
+                    maxY = max(allPoints, key = lambda t: t[1])[1] + yOffset
+                    #print(f"minX: {minX} minY: {minY} maxX: {maxX} maxY: {maxY}")
+                    h = maxY - minY
+                    w = maxX - minX
+                    verts = np.array([[minX, minY+int(h/2)],[minX + int(w/3),minY],[minX + int(2*w/3),minY],[maxX, minY + int(h/2)],[minX + int(2*w/3),maxY],[minX + int(w/3),maxY],[minX,minY+ int(h/2)]],"int32")
+                    #print(f"VERTS: {verts}")
+                    cv2.fillConvexPoly(mapMask, verts, (255,255,255))
                     
-                    self.gameStateObject.setGameStateKeyValue("redPoints",redPoints)
-                    self.gameStateObject.setGameStateKeyValue("bluePoints",bluePoints)
-                    self.gameStateObject.setGameStateKeyValue("yellowPoints",yellowPoints)
 
-                    self.Log.log(f"{self.name}: GreenPoint:\t {len(gp)}, RedPoints:\t{len(redPoints)}, BluePoints:\t {len(bluePoints)}, yellowPoints:\t{len(yellowPoints)}")
+                    roughMaskedMap = cv2.bitwise_and(img,img,mask = cv2.cvtColor(mapMask,cv2.COLOR_BGR2GRAY))
                     
-                    fps = 1/(time.time()-last_time)
-                    fpsSum = fpsSum + fps
-                    count = count + 1
-                    if time.time() - fpsTime >= 10:
-                        self.Log.log(f"{self.name}:\tAverage FPS (10s): {fpsSum/count}")
-                        fpsTime = time.time()
-                        count = 0
-                        fpsSum=0
-                    
-                    final = np.zeros_like(img)
-                    if gP:
-                        cv2.rectangle(final,(int(gP["x"] - gP["size"]/2), int(gP["y"] - gP["size"]/2)),(int(gP["x"] + gP["size"]/2), int(gP["y"] + gP["size"]/2)), (0,255,0),2)
-                    for p in redPoints:
-                        cv2.rectangle(final, p["rect"][0],p["rect"][1], (0,0,255),2)
-                    
-                    for p in bluePoints:
-                        cv2.rectangle(final, p["rect"][0],p["rect"][1], (255,0,0),2)
-                    for p in yellowPoints:
-                        cv2.rectangle(final, p["rect"][0],p["rect"][1], (0,255,255),2)
-                    
-                    cv2.imshow("VIOLET",violet)
-                    cv2.imshow("filled",violet)
-                    cv2.imshow("roughMaskedMap", roughMaskedMap)
-                    cv2.imshow("mapMask",mapMask)
+                    blue = self.colorFilter(img,np.array(self.mapObj["colors"]["blueLower"]),np.array(self.mapObj["colors"]["blueUpper"]))
+                    red = self.colorFilter(img,np.array(self.mapObj["colors"]["redLower"]),np.array(self.mapObj["colors"]["redUpper"]))
+                    violet = self.colorFilter(roughMaskedMap, np.array(self.mapObj["colors"]["violetLower"]),np.array(self.mapObj["colors"]["violetUpper"]))
+                    violet = cv2.add(cv2.add(red,blue),violet)
+                    violet = cv2.cvtColor(violet,cv2.COLOR_BGR2GRAY)
 
-                    cv2.imshow("COLOR FILTERING RESULT",final)
-                    summed = cv2.addWeighted(maskedMap,0.4,final,0.6,0)
-                    cv2.imshow("SUM",summed)
-                    if cv2.waitKey(25) & 0xFF == ord("q"):
-                        cv2.destroyAllWindows()
+                    cnt ,hi = cv2.findContours(violet,cv2.RETR_TREE,cv2.CHAIN_APPROX_NONE)
+                    for c in cnt:
+                        cv2.fillConvexPoly(violet,c,(255,255,255))
+                    violet = cv2.erode(violet, np.ones((5,5),np.uint8)/25,iterations = 1)
+                    
+                    mapMask = violet
 
+                    gCount = 0
+                    gXsum = 0
+                    gYsum = 0
+                    gSsum = 0
+                    gP = {}#self.MapObj(cv2.KeyPoint(0,0,0))
+                    gSampleThresh = 10
+                    scanCondition = True
+                    fpsSum=0
+                    fpsTime=0
+                    count=0
 
-        while self.keepGoing and self.state.getState() != "inGame":
-            pass
-                
+                    while self.state.getState() == "inGame":
+                        last_time = time.time()
+                        img = cv2.cvtColor(np.array(sct.grab(self.mapObj["box"])),cv2.COLOR_BGRA2BGR)
+                        maskedMap = cv2.bitwise_and(img,img,mask = mapMask)
+                        blurredMaskedMap = cv2.GaussianBlur(maskedMap, (5, 5), 0)
+                        redPoints, greenPoints, bluePoints, yellowPoints = self.colorFilterMap(blurredMaskedMap)
+                        if greenPoints:
+                            for p in greenPoints:
+                                gXsum += p["x"]
+                                gYsum += p["y"]
+                                gSsum += p["size"]
+                                gCount += 1
+                                gP["x"] = int(gXsum / gCount)
+                                gP["y"] = int(gYsum / gCount)
+                                gP["size"] = int(gSsum / gCount)
+
+                            gCount = 0
+                            gXsum = 0
+                            gYsum = 0
+                            gSsum = 0
+                            self.gameStateObject.setGameStateKeyValue("greenPoint",gp)
+                        
+                        self.gameStateObject.setGameStateKeyValue("redPoints",redPoints)
+                        self.gameStateObject.setGameStateKeyValue("bluePoints",bluePoints)
+                        self.gameStateObject.setGameStateKeyValue("yellowPoints",yellowPoints)
+
+                        #self.Log.log(f"{self.name}: GreenPoint:\t {len(gp)}, RedPoints:\t{len(redPoints)}, BluePoints:\t {len(bluePoints)}, yellowPoints:\t{len(yellowPoints)}")
+                        
+                        fps = 1/(time.time()-last_time)
+                        fpsSum = fpsSum + fps
+                        count = count + 1
+                        if time.time() - fpsTime >= 10:
+                            self.gameStateObject.setGameStateKeyValue("mapScanFPS",fpsSum/count)
+                            # self.Log.log(f"{self.name}:\tAverage FPS (10s): {fpsSum/count}")
+                            fpsTime = time.time()
+                            count = 0
+                            fpsSum=0
+                        
+                        final = np.zeros_like(img)
+                        if gP:
+                            cv2.rectangle(final,(int(gP["x"] - gP["size"]/2), int(gP["y"] - gP["size"]/2)),(int(gP["x"] + gP["size"]/2), int(gP["y"] + gP["size"]/2)), (0,255,0),2)
+                        for p in redPoints:
+                            cv2.rectangle(final, p["rect"][0],p["rect"][1], (0,0,255),2)
+                        
+                        for p in bluePoints:
+                            cv2.rectangle(final, p["rect"][0],p["rect"][1], (255,0,0),2)
+                        for p in yellowPoints:
+                            cv2.rectangle(final, p["rect"][0],p["rect"][1], (0,255,255),2)
+                        
+                        cv2.imshow("VIOLET",violet)
+                        cv2.imshow("filled",violet)
+                        cv2.imshow("roughMaskedMap", roughMaskedMap)
+                        cv2.imshow("mapMask",mapMask)
+
+                        cv2.imshow("COLOR FILTERING RESULT",final)
+                        summed = cv2.addWeighted(maskedMap,0.4,final,0.6,0)
+                        cv2.imshow("SUM",summed)
+                        if cv2.waitKey(25) & 0xFF == ord("q") or self.state.getState() != 'inGame':
+                            self.Log.log(f"{self.name} destorying all windows")
+                            cv2.destroyAllWindows()   
+                pass
         self.Log.log(f"Thread: {self.name} exiting")
         return 0
 
     def stop(self):
+        self.Log.log(f"Thread: {self.name} initiating shutdown")
         self.keepGoing = False
 
     def colorFilter(self,img, lower = np.array([0,0,0]), upper= np.array([255,255,255])):
